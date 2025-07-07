@@ -12,11 +12,12 @@ CAPTURE_COUNT = 5     # 캡처 횟수
 CAPTURE_FOLDER = "captures" # 캡처 이미지 저장 폴더
 OLLAMA_MODEL = "gemma3" # 사용할 Ollama 모델
 
-DISPLAY_UPDATE_INTERVAL_MS = 400 # 화면에 표시되는 예측 결과 업데이트 주기 (밀리초)
-
 # 모델 경로 설정
 ONNX_MODEL_PATH = "./model/skin_model.onnx"
 TFLITE_MODEL_PATH = "./model/skin_model_quantized.tflite"
+
+# 화면에 표시되는 예측 결과 업데이트 주기 (밀리초)
+DISPLAY_UPDATE_INTERVAL_MS = 400
 
 # --- 클래스 및 모델 설정 ---
 # 클래스명 (7개 클래스)
@@ -140,7 +141,7 @@ def initialize_model():
         try:
             import tensorflow as tf
             from tensorflow import keras
-            h5_model_path = "C:/Users/kccistc/project/onnx_skin_diagnosis/model/skin_model.h5"
+            h5_model_path = "./model/skin_model.h5"
             model = keras.models.load_model(h5_model_path)
             model_type = "H5"
             print("원본 H5 모델을 사용합니다.")
@@ -175,10 +176,6 @@ def main():
         print(f"오류: 폰트 파일을 찾을 수 없습니다: {font_path}. 기본 폰트를 사용합니다.")
         font = ImageFont.load_default()
 
-    # 화면 표시 업데이트를 위한 변수
-    last_display_update_time = time.time()
-    current_display_label = ""
-
     # 카메라 설정
     cap = cv2.VideoCapture(1) # 외부 웹캠
     if not cap.isOpened():
@@ -191,6 +188,16 @@ def main():
     print("화면을 보며 진단할 부위를 중앙에 위치시키세요.")
     print("키보드 'c'를 누르면 5초간 연속으로 촬영하여 진단합니다.")
     print("키보드 'q'를 누르면 프로그램을 종료합니다.")
+
+    # ----------------- OpenCV 창 설정 -----------------
+    window_name = "ONNX Skin Disease Diagnosis"
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window_name, 900, 900)
+    # --------------------------------------------------
+
+    # 화면 업데이트용 변수 초기화
+    last_display_update_time = time.time()
+    current_display_label = ""
 
     while True:
         ret, frame = cap.read()
@@ -236,7 +243,7 @@ def main():
         draw.text((10, 35), current_display_label, font=font, fill=(0, 255, 0))
         display_frame = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
 
-        cv2.imshow('ONNX Skin Disease Diagnosis', display_frame)
+        cv2.imshow(window_name, display_frame)
 
         key = cv2.waitKey(1) & 0xFF
 
@@ -268,7 +275,7 @@ def main():
             
             # OpenCV 형식으로 다시 변환하여 표시
             black_screen_with_text = cv2.cvtColor(np.array(img_pil_black), cv2.COLOR_RGB2BGR)
-            cv2.imshow('ONNX Skin Disease Diagnosis', black_screen_with_text)
+            cv2.imshow(window_name, black_screen_with_text)
             cv2.waitKey(1) # 화면을 즉시 업데이트
 
             print("\n" + "="*40)
@@ -333,4 +340,4 @@ def main():
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    main()
+    main() 
