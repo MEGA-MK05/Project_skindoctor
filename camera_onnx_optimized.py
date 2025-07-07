@@ -1,9 +1,12 @@
 import numpy as np
+import os, platform
+# Wayland 환경에서 Qt 플랫폼 플러그인 오류를 방지하기 위해 Linux에서는 기본적으로 XCB 사용
+if platform.system() == "Linux" and os.environ.get("QT_QPA_PLATFORM", "") == "":
+    os.environ["QT_QPA_PLATFORM"] = "xcb"
 import cv2
 from PIL import ImageFont, ImageDraw, Image
 import time
 import os
-import platform
 import ollama
 import onnxruntime as ort
 from onnxruntime.quantization import quantize_dynamic, QuantType
@@ -425,35 +428,34 @@ def main():
         small_font = ImageFont.load_default()
         print("⚠️ 폰트 로드 실패, 기본 폰트를 사용합니다")
 
-    # 카메라 설정 (여러 인덱스 시도)
-    cap = None
-    camera_indices = [0, 1, 2]  # 리눅스에서는 보통 0, 윈도우에서는 1이 주로 사용됨
-    
-    for idx in camera_indices:
-        cap = cv2.VideoCapture(idx)
-        if cap.isOpened():
-            print(f"✅ 카메라 {idx}번 연결 성공")
-            break
-        cap.release()
-    
-    if cap is None or not cap.isOpened():
-        print("❌ 사용 가능한 카메라를 찾을 수 없습니다.")
-        print("💡 다음을 확인해보세요:")
-        print("   - 카메라가 연결되어 있는지")
-        print("   - 다른 프로그램에서 카메라를 사용 중인지")
-        print("   - 카메라 권한이 있는지")
+    # --- 카메라 열기 --------------------------------------------------
+    cap = open_camera()
+    if cap is None:
+        print("❌ 사용 가능한 카메라를 찾지 못했습니다.")
+        print("💡 다른 앱이 카메라를 점유 중인지 또는 권한(video 그룹) 여부를 확인하세요.")
         return
 
-    # 카메라 해상도 최적화
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
-    cap.set(cv2.CAP_PROP_FPS, CAMERA_FPS)
+    # --- 해상도 / FPS / FOURCC 설정 (가능한 경우에만) ---------------
+    try_set(cap, cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+    try_set(cap, cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+    try_set(cap, cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+    try_set(cap, cv2.CAP_PROP_FPS, CAMERA_FPS)
+
+    # 위 try_set 단계에서 이미 해상도·FPS 설정을 시도했으므로
+    # 추가 cap.set 호출을 제거하여 일부 카메라에서 프레임이 0×0으로
+    # 변하는 문제를 방지합니다.
 
     print("📷 카메라가 준비되었습니다.")
     print("화면을 보며 진단할 부위를 중앙에 위치시키세요.")
     print("키보드 'c'를 누르면 5초간 연속으로 촬영하여 진단합니다.")
     print("키보드 'q'를 누르면 프로그램을 종료합니다.")
     print("키보드 'b'를 누르면 벤치마킹을 다시 실행합니다.")
+
+    # ----------------- OpenCV 창 설정 -----------------
+    window_name = "최적화 ONNX 피부 진단"
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window_name, 900, 900)
+    # --------------------------------------------------
 
     # 성능 측정 변수
     frame_count = 0
@@ -563,7 +565,7 @@ def main():
             draw.text((10, 85), f"💻 Provider: {provider_info.replace('ExecutionProvider', '')}", font=small_font, fill=(255, 255, 0))
         
         display_frame = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-        cv2.imshow('최적화된 ONNX 피부 진단', display_frame)
+        cv2.imshow(window_name, display_frame)
 
         key = cv2.waitKey(1) & 0xFF
 
@@ -602,7 +604,7 @@ def main():
             
             # OpenCV 형식으로 다시 변환하여 표시
             black_screen_with_text = cv2.cvtColor(np.array(img_pil_black), cv2.COLOR_RGB2BGR)
-            cv2.imshow('최적화된 ONNX 피부 진단', black_screen_with_text)
+            cv2.imshow(window_name, black_screen_with_text)
             cv2.waitKey(1) # 화면을 즉시 업데이트
 
             # 진단 로직 (기존과 동일)
@@ -664,6 +666,35 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
+
+# --- 카메라 헬퍼 함수 -------------------------------------------------
+
+def open_camera(indices=(0, 1, 2)):
+    """여러 인덱스를 순회하며 정상 프레임을 반환하는 카메라 객체를 찾는다."""
+    for idx in indices:
+        cap = cv2.VideoCapture(idx)
+        if not cap.isOpened():
+            continue
+
+        ok, frame = cap.read()
+        if ok and frame is not None and frame.size > 0:
+            print(f"✅ 카메라 {idx}번 정상 동작 (기본 설정)")
+            return cap
+
+        # 정상 프레임이 아니면 해제 후 다음 인덱스 시도
+        cap.release()
+    return None
+
+def try_set(cap, prop, value):
+    """카메라 속성 설정 시도 후 실패하면 원복."""
+    old_val = cap.get(prop)
+    cap.set(prop, value)
+    ok, frame = cap.read()
+    if not ok or frame is None or frame.size == 0:
+        cap.set(prop, old_val)
+        print(f"⚠️ 속성 설정 실패 → 원복: {prop}={value}")
+        return False
+    return True
 
 if __name__ == "__main__":
     main() 
