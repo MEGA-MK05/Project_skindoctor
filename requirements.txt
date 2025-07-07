@@ -1,0 +1,25 @@
+# 최적화된 ONNX 기반 피부 질환 진단 시스템 필수 패키지
+
+# 머신러닝 및 딥러닝
+tensorflow>=2.10.0
+numpy>=1.21.0
+
+# ONNX 관련 (최적화 버전)
+onnxruntime>=1.16.0
+onnxruntime-gpu>=1.16.0  # GPU 지원 (CUDA/DirectML)
+tf2onnx>=1.14.0
+onnx>=1.14.0
+
+# 컴퓨터 비전
+opencv-python>=4.7.0
+Pillow>=9.0.0
+
+# 시스템 모니터링 및 최적화
+psutil>=5.9.0
+
+# AI 건강 조언 (선택사항)
+ollama>=0.1.0
+
+# 성능 최적화 (선택사항)
+# onnxruntime-openvino  # Intel OpenVINO 지원
+# onnxruntime-directml  # DirectML 지원 (Windows) 
